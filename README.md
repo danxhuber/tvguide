@@ -1,6 +1,6 @@
 # tvguide
 
-A tool for determining whether stars and galaxies are observable by TESS.
+A tool for determining whether stars and galaxies are observable by TESS. This is a hacked version which returns the cameras for each sector given a fixed pointing (currently hardcoded as 0 degress longitude).
 
 [![Travis status](http://img.shields.io/travis/tessgi/tvguide/master.svg)](http://travis-ci.org/tessgi/tvguide)
 [![PyPI](http://img.shields.io/pypi/v/tvguide.svg)](https://pypi.python.org/pypi/tvguide/)
