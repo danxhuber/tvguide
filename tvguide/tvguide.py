@@ -2,12 +2,14 @@ from __future__ import absolute_import
 
 import numpy as np
 from ._tvguide import tvguidef
-import argparse, sys
+import argparse
 from astropy.coordinates import SkyCoord
 from astropy import units as u
 from . import Highlight
 
 from . import logger
+
+import pdb
 
 
 class TessPointing(object):
@@ -41,40 +43,20 @@ class TessPointing(object):
         returns an array of thirteen integers
             the value of each integer ranges from 0-4
             with 0 meaning not observable, and the integer
-            refering to the camera if the target is observable
-            13 values, one for each sector in Cycle 1
+            refering to the camera if the target is observale
+            13 valies, one for each sector in Cycle 1
         """
+	
         return tvguidef(self.ra_deg, self.dec_deg, self.dstart)
 
-    def get_camera(self, fallback=False):
+    def get_camera(self):
         """
         which camera is the star on?
         """
         cams = self.get_13cameras()
         cams = cams[cams > 0]
         if np.shape(cams)[0] > 0:
-            return int(np.max(cams))
-        else:
-            if fallback:
-                return self.get_camera_loop()
-            else:
-                return 0
-
-    def get_camera_loop(self):
-        """
-        which camera is the star on?
-        loop over starting points
-        """
-        step_arr = np.arange(0, 360, 0.5)
-        outarr = np.zeros_like(step_arr)
-        dstart_orig = np.copy(self.dstart)
-        for i, dstart in enumerate(np.arange(0, 360, 0.5)):
-            self.dstart = dstart
-            cams = self.get_13cameras()
-            outarr[i] = np.max(cams)
-        self.dstart = dstart_orig
-        if np.max(outarr) > 0:
-            return int(np.max(outarr))
+            return int(np.median(cams))
         else:
             return 0
 
@@ -82,23 +64,32 @@ class TessPointing(object):
         """
         returns an integer of how many sectors a target is observable
         """
-        return np.nonzero(self.get_13cameras())[0].shape[0]
+        #return np.nonzero(self.get_13cameras())[0].shape[0]
+	return self.get_13cameras()
 
     def get_maxminmedave(self):
         """
         get the max, min and average number of campaigns that a target
             is observable by TESS in Cycle 1
         """
-        step_arr = np.arange(0, 360, 0.5)
-        outarr = np.zeros_like(step_arr)
-        dstart_orig = np.copy(self.dstart)
-        for i, dstart in enumerate(np.arange(0, 360, 0.5)):
-            self.dstart = dstart
-            outarr[i] = self.get_numcampaigns()
+        #step_arr = np.arange(0, 360, 0.5)
+        #outarr = np.zeros_like(step_arr)
+        #dstart_orig = np.copy(self.dstart)
+        #for i, dstart in enumerate(np.arange(0, 360, 0.5)):
+        #    self.dstart = dstart
+        #    outarr[i] = self.get_numcampaigns()
 
-        self.dstart = dstart_orig
-        return (int(np.max(outarr)), int(np.min(outarr)),
-                int(np.median(outarr)), np.mean(outarr))
+        #self.dstart = dstart_orig
+        #return (int(np.max(outarr)), int(np.min(outarr)),
+        #        int(np.median(outarr)), np.mean(outarr))
+	
+	# hack by DH to only use one starting point	
+	self.dstart = 0.
+	res = self.get_numcampaigns()
+	#pdb.set_trace()
+	return res
+
+
 
 
 def parse_file(infile, exit_on_error=True):
@@ -109,17 +100,15 @@ def parse_file(infile, exit_on_error=True):
             np.genfromtxt(
                 infile,
                 usecols=[0, 1],
-                delimiter=',',
-                comments='#',
-                dtype="f8"
+                delimiter=','
             )
         ).T
     except IOError as e:
-        logger.error("There seems to be a problem with the input file, "
-                     "the format should be: RA_degrees (J2000), Dec_degrees (J2000). "
-                     "There should be no header, columns should be "
-                     "separated by a comma")
         if exit_on_error:
+            logger.error("There seems to be a problem with the input file, "
+                         "the format should be: RA_degrees (J2000), Dec_degrees (J2000). "
+                         "There should be no header, columns should be "
+                         "separated by a comma")
             sys.exit(1)
         else:
             raise e
@@ -130,18 +119,19 @@ def tvguide(args=None):
     """
     exposes tvguide to the command line
     """
-    if args is None:
-        parser = argparse.ArgumentParser(
-            description="Determine whether targets are observable using TESS.")
-        parser.add_argument('ra', nargs=1, type=float,
-                            help="Right Ascension in decimal degrees (J2000).")
-        parser.add_argument('dec', nargs=1, type=float,
-                            help="Declination in decimal degrees (J2000).")
-        args = parser.parse_args(args)
+    parser = argparse.ArgumentParser(
+        description="Determine whether targets are observable using TESS.")
+    parser.add_argument('ra', nargs=1, type=float,
+                        help="Right Ascension in decimal degrees (J2000).")
+    parser.add_argument('dec', nargs=1, type=float,
+                        help="Declination in decimal degrees (J2000).")
 
+    args = parser.parse_args(args)
     ra, dec = args.ra[0], args.dec[0]
 
-    return check_observable(ra, dec)
+    check_observable(ra, dec)
+
+    return
 
 
 def tvguide_csv(args=None):
@@ -179,66 +169,37 @@ def tvguide_csv(args=None):
 #     pass
 
 
-def check_observable(ra, dec,silent=False):
-    """Determine whether targets are observable using TESS.
+def check_observable(ra, dec):
+    """
+    Determine whether targets are observable using TESS.
     Wrapper for tvguide.tvguide for use in Python scripts.
 
-    Give an RA and DEC, returns either int 0 or 1 if not observable at
-    all or not in cycle 1, or returns a set of four: maximum, minimum,
-    median, and average number of times observed.
-
+    example
     -------
     from tvguide import check_observable
     check_observable(234.56, -78.9)
-
     """
 
     tessObj = TessPointing(ra, dec)
 
-    if tessObj.is_observable() == 0 and not silent:
+    if tessObj.is_observable() == 0:
         print(Highlight.RED + "Sorry, the target is not observable by TESS"
               "during Cycle 1 or 2." + Highlight.END)
-    elif tessObj.is_observable() == 1 and not silent:
+    elif tessObj.is_observable() == 1:
         print(Highlight.RED + "Sorry, the target is not observable by TESS"
               " during Cycle 1.\nBut may be observable in Cycle 2" +
               Highlight.END)
     elif tessObj.is_observable() == 2:
-        whichCamera = tessObj.get_camera(fallback=True)
-        outlst = tessObj.get_maxminmedave()
-        outlst = outlst + (whichCamera,)
-        if silent:
-            return outlst
-
         print(Highlight.GREEN +
               "Success! The target may be observable by TESS during Cycle 1." +
               Highlight.END)
-        if whichCamera != 0:
-            print(Highlight.GREEN +
-                  "Looks like it may fall into Camera {}.".format(
-                      whichCamera) + Highlight.END)
-        elif whichCamera == 0:
-            print(Highlight.GREEN +
-                  "Looks like it may fall into gap between cameras," +
-                  Highlight.END)
-            print(Highlight.GREEN +
-                  "but you should still propose this target because the final" +
-                  "pointing is not finalized." +
-                  Highlight.END)
-
         print(Highlight.GREEN +
-              "Each sector is 27.4 days." +
-              " We can observe this source for:" +
-              Highlight.END)
-        print(Highlight.GREEN + "    maximum: {0} sectors".format(
-            outlst[0]) + Highlight.END)
-        print(Highlight.GREEN + "    minimum: {0} sectors".format(
-            outlst[1]) + Highlight.END)
-        print(Highlight.GREEN + "    median:  {0} sectors".format(
-            outlst[2]) + Highlight.END)
-        print(Highlight.GREEN + "    average: {0:0.2f} sectors".format(
-            outlst[3]) + Highlight.END)
+              "Looks like it may fall into Camera {}.".format(
+                  tessObj.get_camera()) + Highlight.END)
 
-    return tessObj.is_observable()
+        outlst = tessObj.get_maxminmedave()
+
+    return outlst
 
 
 def check_many(ra, dec, output_fn=''):
@@ -254,18 +215,17 @@ def check_many(ra, dec, output_fn=''):
 
     minC = np.zeros_like(ra, dtype=int)
     maxC = np.zeros_like(ra, dtype=int)
+    #pdb.set_trace()
+    output=np.zeros((len(ra),13))
+    i=0.
     for idx in range(len(ra)):
         tobj = TessPointing(ra[idx], dec[idx])
-        minC[idx] = tobj.get_maxminmedave()[1]
-        maxC[idx] = tobj.get_maxminmedave()[0]
-    output = np.array([ra, dec, minC, maxC])
+        res = tobj.get_maxminmedave()
+    	output[i,:] = res
+	i=i+1
+    
+    return output
 
-    if (len(output_fn) > 0):
-        print("Writing {0}".format(output_fn))
-        np.savetxt(output_fn, output.T, delimiter=', ',
-                   fmt=['%10.10f', '%10.10f', '%i', '%i'])
-    else:
-        return output.T
 
 
 if __name__ == '__main__':
